@@ -60,6 +60,9 @@
       <Name>Logarazzi</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="apache_access.csv" />
+  </ItemGroup>
   <Choose>
     <When Condition="'$(VisualStudioVersion)' == '10.0' And '$(IsCodedUITest)' == 'True'">
       <ItemGroup>

@@ -46,6 +46,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="FileUpdatedEventArgs.cs" />
     <Compile Include="frmLogarazzi.cs">
       <SubType>Form</SubType>
     </Compile>

@@ -7,8 +7,16 @@ using System.Threading.Tasks;
 
 namespace Logarazzi
 {
-	public class LogFileWatcher
+	public class LogFileWatcher : IDisposable
 	{
+		#region Events
+		public event FileUpdatedHandler FileUpdated;
+
+		public delegate void FileUpdatedHandler(object sender, FileUpdatedEventArgs e);
+
+		#endregion
+		private string lastLine = string.Empty;
+
 		public int DefaultMaxLineCount { get; set; } = 100;
 
 		private FileSystemWatcher watcher = null;
@@ -19,7 +27,7 @@ namespace Logarazzi
 			{
 				if (watcher != null)
 				{
-					return watcher.Path;
+					return Path.Combine(watcher.Path, watcher.Filter);
 				}
 				else
 				{
@@ -34,7 +42,7 @@ namespace Logarazzi
 
 		private void SetWatcher(string filePath)
 		{
-			if (watcher != null || string.Equals(watcher.Path, filePath) == false)
+			if (watcher != null && string.Equals(watcher.Path, filePath) == false)
 			{
 				RemoveWatcherEvents();
 				watcher.Dispose();
@@ -42,12 +50,21 @@ namespace Logarazzi
 			}
 
 			watcher = GetNewFileSystemWatcher(filePath);
+			watcher.BeginInit();
 			AddWatcherEvents();
+			watcher.EndInit();
+
 		}
 
 		private FileSystemWatcher GetNewFileSystemWatcher(string filePath)
 		{
-			return new FileSystemWatcher(filePath);
+			FileSystemWatcher result = new FileSystemWatcher(Path.GetDirectoryName(filePath), Path.GetFileName(filePath))
+			{
+				EnableRaisingEvents = true,
+				NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.CreationTime 
+			};
+			
+			return result;
 		}
 
 		#region Event handlers
@@ -74,6 +91,7 @@ namespace Logarazzi
 		private void watcher_Renamed(object sender, RenamedEventArgs e)
 		{
 			Console.WriteLine("watcher_Renamed");
+			OnUpdate(FileUpdatedEventArgs.UpdateTypes.Renamed);
 		}
 
 		private void watcher_Error(object sender, ErrorEventArgs e)
@@ -84,21 +102,32 @@ namespace Logarazzi
 		private void watcher_Deleted(object sender, FileSystemEventArgs e)
 		{
 			Console.WriteLine("watcher_Deleted");
+			OnUpdate(FileUpdatedEventArgs.UpdateTypes.Deleted);
 		}
 
 		private void watcher_Created(object sender, FileSystemEventArgs e)
 		{
 			Console.WriteLine("watcher_Created");
+			OnUpdate(FileUpdatedEventArgs.UpdateTypes.Created);
 		}
 
 		private void watcher_Changed(object sender, FileSystemEventArgs e)
 		{
 			Console.WriteLine("watcher_Changed");
+			OnUpdate(FileUpdatedEventArgs.UpdateTypes.Modified);
+		}
+
+		private void OnUpdate(FileUpdatedEventArgs.UpdateTypes updateType)
+		{
+			if (FileUpdated != null)
+			{
+				FileUpdated(this, new FileUpdatedEventArgs(this.FilePath, updateType));
+			}
 		}
 
 		#endregion
 
-		private List<string> GetLines(int start, int stop = -1)
+		private async Task<List<string>> InternalGetLines(int start, int stop = -1)
 		{
 			List<string> result = new List<string>();
 
@@ -115,19 +144,29 @@ namespace Logarazzi
 
 					while (currentLine < start && reader.EndOfStream == false)
 					{
-						reader.ReadLineAsync();
+						await  reader.ReadLineAsync();
 						currentLine++;
 					}
 
 					while (currentLine < stop && reader.EndOfStream == false)
 					{
-						reader.ReadLineAsync().ContinueWith((taskResult) => result.Add(taskResult.Result));
+						await reader.ReadLineAsync().ContinueWith((taskResult) => result.Add(taskResult.Result));
 						currentLine++;
 					}
 				}
 			}
 
 			return result;
+		}
+
+		public List<string> GetLines(int start, int stop = -1)
+		{
+			return InternalGetLines(start, stop).Result;
+		}
+
+		public void Dispose()
+		{
+			watcher?.Dispose();
 		}
 	}
 }
